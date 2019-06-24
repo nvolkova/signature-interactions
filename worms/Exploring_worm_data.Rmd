@@ -1,0 +1,354 @@
+---
+title: "Visualizing C.elegans data"
+output:
+  html_document:
+    df_print: paged
+---
+
+Upload the sample annotations and mutation spectra.
+```{r}
+library(ggplot2)
+library(openxlsx)
+library(reshape2)
+library(tsne)
+```
+Source some useful functions
+```{r}
+source('../useful_functions.R')
+source('../plotting_functions.R')
+```
+Upload the sample annotations
+```{r}
+data <- openxlsx::read.xlsx(xlsxFile = "Supplementary Table 1. Sample description for C.elegans experiments.xlsx", sheet = 2, cols = 1:8)
+data$Sample <- as.character(data$Sample)
+data$Genotype <- as.character(data$Genotype)
+CD2Mutant <- sapply(1:nrow(data), function(i) {
+  if (data$Type[i] == 'mut.acc.') return(paste0(data$Genotype[i],':',data$Generation[i]))
+  return(paste0(data$Genotype[i],':',data$Mutagen[i],':',data$Drug.concentration[i]))
+})
+names(CD2Mutant) <- data$Sample
+CD2Mutant <- CD2Mutant[sort(names(CD2Mutant))]
+```
+Upload the spectra
+```{r}
+new.spectrum <- read.xlsx(xlsxFile = "Supplementary Table 1. Sample description for C.elegans experiments.xlsx", sheet = 3, rowNames = T)
+CD2Mutant <- CD2Mutant[rownames(new.spectrum)] # remove reference worms
+data <- data[match(names(CD2Mutant),data$Sample),]
+head(new.spectrum[,1:10])
+```
+
+Make a tsne plot: aggregate replicates within experiment and plot only interesting experiments
+```{r}
+Y <- new.spectrum
+CD2Mutant_tmp <- CD2Mutant[data$Drug.concentration > 0 | data$Generation > 3]
+experiments <- unique(CD2Mutant_tmp) # 552
+exp.set <- list()
+exp_number <- 1
+for (k in experiments) {
+  ind <- which(CD2Mutant==k)
+  tab <- table(substr(names(ind),1,6))
+  good <- names(tab)
+  if (length(good)>0) {
+    for (g in good) {
+      exp.set[[exp_number]] <- ind[grep(g,names(ind))]
+      names(exp.set)[exp_number] <- paste0(k,'/',g)
+      exp_number <- exp_number+1
+    }
+  }
+}
+Ypathway <- t(sapply(exp.set, function(l) colSums(Y[l,,drop=F])))
+rownames(Ypathway) <- names(exp.set)
+x <- Ypathway
+# restrict number of mutations
+x <- x[rowSums(x)>20,] # 549 x 119
+
+cosdist <- function(x,y) {
+  return(1 - sum(x * y) / sqrt(sum(x**2)) / sqrt(sum(y**2)))
+}
+cosineM <- function(X) {
+  return(sapply(1:ncol(X), function(i) sapply(1:ncol(X), function(j) cosdist(X[,i], X[,j]))))
+}
+
+# cosine distance matrix
+D <- cosineM(t(x))
+set.seed(123456)
+t <- tsne(D, perplexity = 15)
+rownames(t) <- rownames(x)
+```
+
+Plot it
+```{r, echo = F}
+col_vector <- c(Aflatoxin = "gray",
+                AA = "gray48",
+                #AAI = "darkslategray",
+                #AAII = "gray",
+                #Ble = "#7ABADB",
+                Cis = "cornflowerblue",
+                #Cyclo = "chartreuse1",
+                DMS = "springgreen",
+                EMS = "darkgreen",
+                #Gly = "#80E8D4",
+                HU = "plum1",
+                Mech = "darkolivegreen1",
+                Mito= "lavender",
+                MMS = "springgreen3",
+                #Nitro = "mediumpurple1",
+                #Proton ="black",
+                Rad = "darkred", 
+                UV = 'darkorange', 
+                Xray = 'saddlebrown')
+df <- data.frame(mutagene = as.character(sapply(rownames(t), function(z)
+                    data$Mutagen[grep(unlist(strsplit(z,split='[/]'))[2], data$Sample)[1]])), 
+                 gene = as.character(sapply(rownames(t), function(z)
+                   data$Genotype[grep(unlist(strsplit(z,split='[/]'))[2], data$Sample)[1]])), 
+                 x = -t[,1], y = -t[,2], 
+                 number = rowSums(Ypathway[rownames(t),]) / sapply(rownames(t), function(z) length(exp.set[[z]])),
+                 name = sapply(rownames(t), function(z) 
+                   CD2Mutant[grep(unlist(strsplit(z,split='[/]'))[2],names(CD2Mutant))[1]]))
+df <- df[order(df$number, decreasing = T),] # order such that smallest dots are shown on top
+p <- ggplot(data = df, aes(x = x, y = y, fill = mutagene, size = number)) + 
+              geom_point(pch=21,col='black',stroke=0.5) +
+  scale_fill_manual(name = 'Mutagen', values = as.vector(col_vector)) + 
+  scale_size_continuous(range=c(1,20), name = 'No. of mutations', 
+                        breaks = c(100,1000,10000), labels = c(100,1000,10000))+
+  theme_bw() + 
+  theme(legend.position="none", 
+        panel.border = element_rect(colour='white'),
+        axis.text = element_blank(), 
+        axis.title= element_blank(),
+        axis.ticks = element_blank(),
+        line=element_blank(),
+        text = element_text(size=20)) +
+  guides(fill = guide_legend(override.aes = list(size=5)))
+p
+```
+
+Stability of experimental data: divide into replicates and check mean-variance relationship. Red - Poisson, Blue - negative binomial
+```{r, echo = F}
+means = vars = matrix(NA, nrow=length(exp.set), ncol=119)
+for (i in 1:length(exp.set)) {
+  means[i,] <- colMeans(Y[names(exp.set[[i]]),], na.rm=T)
+  vars[i,] <- apply(Y[names(exp.set[[i]]),], 2, var, na.rm = T)
+}
+
+k=120.786 # see separate Python script for estimating this value
+plot(as.vector(log(means)),as.vector(log(sqrt(vars)/means)),cex=0.5,pch=16, ylab='CV (log)', xlab = 'Expected value (log)')
+# Poisson
+points(log(seq(0,max(means,na.rm = T),0.01)),-log(seq(0,max(means,na.rm = T),0.01))/2,cex=0.5,pch=16,col='red')
+# Negative binomial
+points(log(seq(0,max(means,na.rm = T),0.01)),log(1 + seq(0,max(means,na.rm = T),0.01)/k)/2 - log(seq(0,max(means,na.rm = T),0.01))/2,cex=0.5,pch=16,col='blue')
+```
+
+
+Gather all mutations per sample
+```{r}
+mode <- sapply(CD2Mutant, function(z) {
+  mut <- unlist(strsplit(z,split='[:]'))
+  if (mut[2] %in% unique(data$Mutagen)) {
+    if (mut[1] == 'N2') return('Mutagen') else return('Interaction')
+  }
+  else return('MA')
+})
+
+df <- data.frame(number = c((log10(rowSums(Y)[mode == 'MA'])),
+                            (log10(rowSums(Y)[mode == 'Mutagen'])),
+                            (log10(rowSums(Y)[mode == 'Interaction']))),
+                 x = c(1:sum(mode == 'MA'),1:sum(mode == 'Mutagen'),1:sum(mode == 'Interaction')),
+                 name = CD2Mutant[names(c((log10(rowSums(Y)[mode == 'MA'])),
+                            (log10(rowSums(Y)[mode == 'Mutagen'])),
+                            (log10(rowSums(Y)[mode == 'Interaction']))))],
+                 real_name = names(c((log10(rowSums(Y)[mode == 'MA'])),
+                            (log10(rowSums(Y)[mode == 'Mutagen'])),
+                            (log10(rowSums(Y)[mode == 'Interaction'])))),
+                 mode = c(rep('MA',sum(mode == 'MA')),
+                          rep('Mutagen', sum(mode == 'Mutagen')),
+                          rep('Interaction', sum(mode == 'Interaction'))))
+```
+
+Visualize substitutions
+```{r,echo=F}
+df.sub <- df
+df.sub$number <- c((log10(rowSums(Y[,1:96])[mode == 'MA'])),
+               (log10(rowSums(Y[,1:96])[mode == 'Mutagen'])),
+               (log10(rowSums(Y[,1:96])[mode == 'Interaction'])))
+
+df.sub_median <- data.frame(y = c(sapply(unique(df.sub$name[df.sub$mode == 'MA']), function(x) 
+                                        mean(log10(rowSums(Y[CD2Mutant == x,1:96])))),
+                              sapply(unique(df.sub$name[df.sub$mode == 'Mutagen']), function(x) 
+                                        mean(log10(rowSums(Y[CD2Mutant == x,1:96])))),
+                              sapply(unique(df.sub$name[df.sub$mode == 'Interaction']), function(x) 
+                                        mean(log10(rowSums(Y[CD2Mutant == x,1:96]))))),
+                        name = c(unique(as.character(df.sub$name[df.sub$mode == 'MA'])),
+                                 unique(as.character(df.sub$name[df.sub$mode == 'Mutagen'])),
+                                 unique(as.character(df.sub$name[df.sub$mode == 'Interaction']))),
+                        mode = c(rep('MA',length(unique(df.sub$name[df.sub$mode == 'MA']))),
+                                 rep('Mutagen',length(unique(df.sub$name[df.sub$mode == 'Mutagen']))),
+                                 rep('Interaction',length(unique(df.sub$name[df.sub$mode == 'Interaction'])))),
+                        stringsAsFactors = F)
+df.sub_median <- df.sub_median[order(df.sub_median$y,decreasing = F),]
+
+df.sub_median_global <- data.frame(y = log10(c(median(10**df.sub_median$y[df.sub_median$mode == 'MA']),
+                                           median(10**df.sub_median$y[df.sub_median$mode == 'Mutagen']),
+                                           median(10**df.sub_median$y[df.sub_median$mode == 'Interaction']))),
+                                   mode = c('MA','Mutagen','Interaction'))
+
+
+p.sub <- ggplot(df.sub, aes(x=factor(name,levels = c(df.sub_median$name[df.sub_median$mode=='MA'],
+                                             df.sub_median$name[df.sub_median$mode=='Mutagen'],
+                                             df.sub_median$name[df.sub_median$mode=='Interaction'])),
+                             y=number)) + 
+  geom_point(size=0.05, col = 'gray86') +
+  theme_bw() +
+  theme(title = element_text(size = 8),
+        text = element_text(size = 8),
+        axis.ticks.x=element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_line(size = 0.1),
+        axis.line.y = element_line(size=0.1),
+        strip.background=element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.border = element_blank()) +
+    theme(plot.margin=grid::unit(c(1,2,1,1), "mm")) +
+  coord_cartesian(clip = "off") +
+  labs(x = 'Experiment', title = 'Substitutions') +
+  facet_grid(. ~ factor(mode,levels = c('MA','Mutagen','Interaction')), scales = "free_x", switch="x") +
+  scale_y_continuous(name="Mutations / sample", breaks = log10(c(c(1:9),c(1:9)*10,c(1:9)*100,1000,2000)),
+                     labels=c("1",rep('',8),"10",rep('',8),"100",rep('',8),"1000",''), limits=c(0,3.5)) +
+  geom_point(size = 0.1, col = 'black', data = df.sub_median, mapping = aes(x = name, y = y)) +
+  geom_hline(data = df.sub_median_global, aes(yintercept = y), size = 0.1)
+p.sub
+```
+
+Visualize indels
+```{r, echo = F}
+df.ind <- df
+df.ind$number <- c(log10(rowSums(Y[,99:112])[mode == 'MA']),
+               log10(rowSums(Y[,99:112])[mode == 'Mutagen']),
+               log10(rowSums(Y[,99:112])[mode == 'Interaction']))
+
+df.ind_median <- data.frame(y = c(sapply(unique(df.ind$name[df.ind$mode == 'MA']), function(x) log10(mean(rowSums(Y[CD2Mutant == x,99:112])))),
+                              sapply(unique(df.ind$name[df.ind$mode == 'Mutagen']), function(x) log10(mean(rowSums(Y[CD2Mutant == x,99:112])))),
+                              sapply(unique(df.ind$name[df.ind$mode == 'Interaction']), function(x) log10(mean(rowSums(Y[CD2Mutant == x,99:112]))))),
+                        name = c(unique(as.character(df.ind$name[df.ind$mode == 'MA'])),
+                                 unique(as.character(df.ind$name[df.ind$mode == 'Mutagen'])),
+                                 unique(as.character(df.ind$name[df.ind$mode == 'Interaction']))),
+                        mode = c(rep('MA',length(unique(df.ind$name[df.ind$mode == 'MA']))),
+                                 rep('Mutagen',length(unique(df.ind$name[df.ind$mode == 'Mutagen']))),
+                                 rep('Interaction',length(unique(df.ind$name[df.ind$mode == 'Interaction'])))),
+                        stringsAsFactors = F)
+df.ind_median <- df.ind_median[order(df.ind_median$y,decreasing = F),]
+
+df.ind_median_global <- data.frame(y = log10(c(median(10**df.ind_median$y[df.ind_median$mode == 'MA']),
+                                           median(10**df.ind_median$y[df.ind_median$mode == 'Mutagen']),
+                                           median(10**df.ind_median$y[df.ind_median$mode == 'Interaction']))), 
+                               mode = c('MA','Mutagen','Interaction'))
+
+
+p.ind <- ggplot(df.ind, aes(x=factor(name,levels = c(df.ind_median$name[df.ind_median$mode=='MA'],
+                                             df.ind_median$name[df.ind_median$mode=='Mutagen'],
+                                             df.ind_median$name[df.ind_median$mode=='Interaction'])),
+                             y=number)) + 
+  geom_point(size=0.05, col = 'gray86') +
+  theme_bw() +
+  theme(title = element_text(size = 8),
+        text = element_text(size = 8),
+        axis.ticks.x=element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_line(size = 0.1),
+        axis.line.y = element_line(size=0.1),
+        strip.background=element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.border = element_blank()) +
+    theme(plot.margin=grid::unit(c(1,1,1,1), "mm")) +
+  coord_cartesian(clip = "off") +
+  labs(x = 'Experiment', title = 'Indels') +
+  facet_grid(. ~ factor(mode,levels = c('MA','Mutagen','Interaction')), scales = "free_x",switch="x") +
+  scale_y_continuous(name="", breaks = log10(c(c(1:9),c(1:9)*10,c(1:9)*100,1000,2000)),
+                     labels=c("1",rep('',8),"10",rep('',8),"100",rep('',8),"1000",''), limits=c(0,3.5)) +
+  geom_point(size = 0.1, col = "#8DD3C7", data = df.ind_median, mapping = aes(x = name, y = y)) +
+  geom_hline(data = df.ind_median_global, aes(yintercept = y), size = 0.1)
+p.ind
+```
+
+Visualize SVs
+```{r, echo = F}
+df.sv <- df
+df.sv$number <- c(rowSums(Y[,113:119])[mode == 'MA'],
+                            rowSums(Y[,113:119])[mode == 'Mutagen'],
+                            rowSums(Y[,113:119])[mode == 'Interaction'])
+
+df.sv_median <- data.frame(y = c(sapply(unique(df.sv$name[df.sv$mode == 'MA']), function(x) mean(rowSums(Y[CD2Mutant == x,113:119]))),
+                              sapply(unique(df.sv$name[df.sv$mode == 'Mutagen']), function(x) mean(rowSums(Y[CD2Mutant == x,113:119]))),
+                              sapply(unique(df.sv$name[df.sv$mode == 'Interaction']), function(x) mean(rowSums(Y[CD2Mutant == x,113:119])))),
+                        name = c(unique(as.character(df.sv$name[df.sv$mode == 'MA'])),
+                                 unique(as.character(df.sv$name[df.sv$mode == 'Mutagen'])),
+                                 unique(as.character(df.sv$name[df.sv$mode == 'Interaction']))),
+                        mode = c(rep('MA',length(unique(df.sv$name[df.sv$mode == 'MA']))),
+                                 rep('Mutagen',length(unique(df.sv$name[df.sv$mode == 'Mutagen']))),
+                                 rep('Interaction',length(unique(df.sv$name[df.sv$mode == 'Interaction'])))),
+                        stringsAsFactors = F)
+df.sv_median <- df.sv_median[order(df.sv_median$y,decreasing = F),]
+
+df.sv_median_global <- data.frame(y = c(median(df.sv_median$y[df.sv_median$mode == 'MA']),
+                                     median(df.sv_median$y[df.sv_median$mode == 'Mutagen']),
+                                     median(df.sv_median$y[df.sv_median$mode == 'Interaction'])),
+                               mode = c('MA','Mutagen','Interaction'))
+
+
+p.sv <- ggplot(df.sv, aes(x=factor(name,levels = c(df.sv_median$name[df.sv_median$mode=='MA'],
+                                             df.sv_median$name[df.sv_median$mode=='Mutagen'],
+                                             df.sv_median$name[df.sv_median$mode=='Interaction'])),
+                             y=number)) + 
+  geom_point(size=0.05, col = 'gray86') +
+  theme_bw() +
+  theme(title = element_text(size = 8),
+        text = element_text(size = 8),
+        axis.ticks.x=element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_line(size = 0.1),
+        axis.line.y = element_line(size=0.1),
+        strip.background=element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.border = element_blank()) +
+  theme(plot.margin=grid::unit(c(1,1,1,2), "mm")) +
+  coord_cartesian(clip = "off") +
+  labs(x = 'Experiment', title = 'Structural variants') +
+  facet_grid(. ~ factor(mode,levels = c('MA','Mutagen','Interaction')), scales = "free_x",switch="x") +
+  scale_y_continuous(name="", breaks = c(0,2,4,6,8,10,12), limits=c(0,12)) +
+  geom_point(size = 0.1, col = "darkmagenta", data = df.sv_median, mapping = aes(x = name, y = y)) +
+    geom_hline(data = df.sv_median_global, aes(yintercept = y), size = 0.1)
+p.sv
+```
+
+# How the full profiles look like
+```{r}
+clrs = c("#2EBAED","#000000","#DE1C14","#D4D2D2","#ADCC54","#F0D0CE","brown","#8DD3C7","goldenrod","#BEBADA","darkmagenta")
+inds <- c('CD0134a','CD0850j','CD0842d')
+plot_dnvhugesig_wb(t(Y[inds,]), colors = clrs, norm = F, diff_scale = T) + 
+  theme(panel.grid = element_blank())
+```
+
+# Estimate mutation rates
+```{r}
+counts <- rowSums(Y[,99:119])[names(CD2Mutant)[grep('N2:Rad',CD2Mutant)]]
+doses <- data$Drug.concentration[match(names(CD2Mutant)[grep('N2:Rad',CD2Mutant)],data$Sample)]
+rad.data <- data.frame(y = counts, x = doses / 80) # adjust to whatever dose you like
+model <- glm(y ~ x, family = stats::poisson(link = 'identity'), data = rad.data)
+coef(summary(model)) # Mutation rate of about 3.62 indel/SV mutations per 80 Gy
+```
+
+
+# Making boxplots for number of mutations
+```{r}
+z <-'polk-1:MMS' 
+tmp <- Y[rev(grep(z,CD2Mutant)),]
+f <- barplot(t(cbind(rowSums(tmp[,1:16]),rowSums(tmp[,17:32]),rowSums(tmp[,33:48]),
+              rowSums(tmp[,49:64]),rowSums(tmp[,65:80]),rowSums(tmp[,81:96]),
+              rowSums(tmp[,97:98]),rowSums(tmp[,99:104]),rowSums(tmp[,105:106]),
+              rowSums(tmp[,107:112]),rowSums(tmp[,113:119]))), col = (clrs),
+        main = z, horiz = T, yaxt = 'n', xlim = c(0,700), border = NA)
+axis(side = 2, at = f, labels = data$Drug.concentration[rev(grep(z,CD2Mutant))], las = 2)
+```
