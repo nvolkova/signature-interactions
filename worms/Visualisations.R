@@ -196,11 +196,11 @@ for (z in c('agt.1.MMS','polk.1.MMS','agt.1.EMS','polk.1.EMS','xpc.1.UV','xpf.1.
 
 mu <- ((as.matrix(G1) %*% t((beta_GH_greta_full))) * ((g + as.matrix(W2) %*% t(t(alpha_G_greta)) + 
                                                  doses * (as.matrix(W) %*% t(t(alpha_GM_greta)))) %*% matrix(1,nrow = 1,ncol=119)) + 
-  (as.matrix(Mall) %*% t((beta_M_greta_full))) * exp(as.matrix(W) %*% t(beta_I_greta_full)))[,1:96]
+  (as.matrix(Mall) %*% t((beta_M_greta_full))) * exp(as.matrix(W) %*% t(beta_I_greta_full)))
 
-genetic_cont <- ((as.matrix(G1) %*% t((beta_GH_greta_full))) * ((g + as.matrix(W2) %*% t(t(alpha_G_greta))) %*% matrix(1,nrow = 1,ncol=119)))[,1:96]
-genmut_cont <- ((as.matrix(G1) %*% t((beta_GH_greta_full))) * ((doses * (as.matrix(W) %*% t(t(alpha_GM_greta)))) %*% matrix(1,nrow = 1,ncol=119)))[,1:96]
-matrix_of_dif <- (as.matrix(Mall) %*% t((beta_M_greta_full)) * exp(as.matrix(W) %*% t(beta_I_greta_full)) - as.matrix(Mall) %*% t((beta_M_greta_full)) + genmut_cont)[,1:96]
+genetic_cont <- ((as.matrix(G1) %*% t((beta_GH_greta_full))) * ((g + as.matrix(W2) %*% t(t(alpha_G_greta))) %*% matrix(1,nrow = 1,ncol=119)))
+genmut_cont <- ((as.matrix(G1) %*% t((beta_GH_greta_full))) * ((doses * (as.matrix(W) %*% t(t(alpha_GM_greta)))) %*% matrix(1,nrow = 1,ncol=119)))
+matrix_of_dif <- (as.matrix(Mall) %*% t((beta_M_greta_full)) * exp(as.matrix(W) %*% t(beta_I_greta_full)) - as.matrix(Mall) %*% t((beta_M_greta_full)) + genmut_cont)
 pdf('factor_group_contributions.pdf',width = 8,height = 6)
 par(mar = c(8,5,5,5))
 f <- barplot(c(sum(rowSums(genetic_cont)[rowSums(W)>0]), 
