@@ -202,7 +202,7 @@ library(ggplot2)
 library(reshape2)
 
 plot_dnvhugesig_wb <- function(mut_matrix, colors=NA, norm=T, ymax=NA, ytitle = 'Number of mutations', # signatures for 119 profile, DNV collapsed, indel resolved
-                               CI = F, low = NA, high = NA, diff_scale = F)
+                               CI = F, low = NA, high = NA, diff_scale = F, rownames = T, diff_limits = NULL)
 {
   types.full <- paste(rep(rep(c('A','C','G','T'), each = 4), 6), '[',
                       rep(c('C','T'), each = 48), '>', rep(c('A','G','T','A','C','G'), each=16), ']',
@@ -255,9 +255,14 @@ plot_dnvhugesig_wb <- function(mut_matrix, colors=NA, norm=T, ymax=NA, ytitle = 
   if (diff_scale)
     scales <- 'free'
   else scales <- 'free_x'
+  
+  if (!is.null(diff_limits)) {
+    df3 <- rbind(df3, data.frame(substitution = 'Zfake', context = '0', variable = unique(df3$variable), value = diff_limits, width = 0.2))
+  }
+  
   p = ggplot(data = df3, aes(x = context, y = value, fill = substitution, width = width)) +
     geom_bar(stat = "identity", colour = "black", size = NA) +
-    scale_fill_manual(values = colors) + facet_grid(variable ~ substitution, scales = scales) +
+    scale_fill_manual(values = c(colors,'white')) + facet_grid(variable ~ substitution, scales = scales) +
     ylab(ytitle) + 
     guides(fill = FALSE) + theme_bw() +
     theme(axis.title.y = element_text(size = 10,vjust = 1), 
@@ -271,6 +276,7 @@ plot_dnvhugesig_wb <- function(mut_matrix, colors=NA, norm=T, ymax=NA, ytitle = 
           panel.border = element_rect(colour="white"),
           panel.spacing = unit(0.1,'lines'))
   if (!diff_scale) p <- p + coord_cartesian(ylim = c(0,ymax)) 
+  if (!rownames) p <- p + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
   
   
   if (CI) {
@@ -286,8 +292,13 @@ plot_dnvhugesig_wb <- function(mut_matrix, colors=NA, norm=T, ymax=NA, ytitle = 
     df_upper = cbind(df,as.data.frame(norm_mut_matrix_upper))
     df_lower = melt(df_lower, id.vars = c("substitution", "context"))
     df_upper = melt(df_upper, id.vars = c("substitution", "context"))
-    df3$value_min = df_lower$value
-    df3$value_max = df_upper$value
+    if (!is.null(diff_limits)) {
+      df3$value_min = c(df_lower$value, rep(0,ncol(mut_matrix)))
+      df3$value_max = c(df_upper$value, rep(0,ncol(mut_matrix)))
+    } else {
+      df3$value_min = df_lower$value
+      df3$value_max = df_upper$value
+    }
     p <- p + geom_errorbar(data=df3, aes(ymin = value_min, ymax = value_max), colour = 'darkgrey', width = 0.02)
 #    plot <- plot + geom_pointrange(data=df3, aes(ymin=value, ymax=value_max, colour=substitution),
 #                                  fatten = 0.001, size=0.5, show.legend = F) +
@@ -316,16 +327,6 @@ intersperse_119 <- function(y) {
            y[113:119]))
 }
 
-
-intersperse_96 <- function(y) {
-  return(c(y[1:16],NA,
-           y[17:32],NA,
-           y[33:48],NA,
-           y[49:64],NA,
-           y[65:80],NA,
-           y[81:96]))
-}
-
 intersperse_104 <- function(y) {
   return(c(y[1:16],NA,
            y[17:32],NA,
@@ -343,23 +344,6 @@ intersperse_104 <- function(y) {
            y[104]))
 }
 
-intersperse_105 <- function(y) {
-  return(c(y[1:16],NA,
-           y[17:32],NA,
-           y[33:48],NA,
-           y[49:64],NA,
-           y[65:80],NA,
-           y[81:96],NA,
-           y[97],NA,
-           y[98],NA,
-           y[99],NA,
-           y[100],NA,
-           y[101],NA,
-           y[102],NA,
-           y[103],NA,
-           y[104],NA,
-           y[105]))
-}
 
 ##################
 
@@ -510,29 +494,33 @@ interaction_effect_plot <- function(y, at=c(-1,0,1), plot_main = '', log = T,CI=
       c(2:9) * 10**i)))), labels = c(rep('',8*(max(at) - min(at)))), las = 2, pos = -0.5, tck = -0.02)
     axis(side = 2, at = c(at), labels = c(as.character(labels)), las = 2, pos = -0.5, tck = -0.03)
     #axis(side = 2, col = 'white', tcl = 0, labels = NA, lwd = 3, pos = -0.5)
-    lines(x = c(-0.5,185.5), y = c(0,0),lty = 2, col = 'red')
+    if (log) lines(x = c(-0.5,185.5), y = c(0,0),lty = 2, col = 'red')
+    else  lines(x = c(-0.5,185.5), y = c(1,1),lty = 2, col = 'red')
   }  else {
-    axis(side = 2, at = at, labels = labels, las = 2, pos = -0.5)
+    axis(side = 2, at = c(log10(do.call('c',lapply(c((-1):(max(at)-1)), function(i) 
+      c(2:9) * 10**i)))), labels = c(rep('',8*(max(at) - min(at)))), las = 2, pos = -0.5, tck = -0.02)
+    axis(side = 2, at = c(at), labels = c(as.character(labels)), las = 2, pos = -0.5, tck = -0.03)
     #axis(side = 2, col = 'white', lwd = 3, tcl = 0, labels = NA, pos = -0.5)
-    lines(x = c(-0.5,187), y = c(1,1),lty = 2, col = 'red')
+    if (log) lines(x = c(-0.5,185.5), y = c(0,0),lty = 2, col = 'red')
+    else  lines(x = c(-0.5,185.5), y = c(1,1),lty = 2, col = 'red')
   }
   
 }
 
 interaction_effect_plot_human <- function(y, at=c(-1,0,1), plot_main = '', log = T,CI=F,low,high, cex = 3, lwd = 4, labels=NA, lwd.means = 4,
-                                    col = c("#2EBAED","#000000","#DE1C14","#D4D2D2","#ADCC54","#F0D0CE","orange",'darkmagenta',"purple",'brown')) {
-  if (length(y) != 105) return('Working progress!')
-  fff <- data.frame(bar = intersperse_105(y))
+                                    col = c("#2EBAED","#000000","#DE1C14","#D4D2D2","#ADCC54","#F0D0CE","orange",'darkmagenta',"purple")) {
+
+  fff <- data.frame(bar = intersperse_104(y))
   if (log) fff$bar <- fff$bar / log(10)
-  line_X_axis <- cumsum(c(rep(1,101),3,2,3,2,3,2,6,2,5,2,6,2,3,2,3,2,3,2)) - 1
+  line_X_axis <- cumsum(c(rep(1,101),3,2,3,2,3,2,6,2,5,2,6,2,3,2,3,2)) - 1
   plot(x = line_X_axis, y = rep(NA,length(line_X_axis)),
        xlim = c(0,max(line_X_axis)),
        ylim = c(min(at),max(at)),
        yaxt = 'n', xaxt = 'n', xlab = '', ylab = '', bty='n')
   fff[fff < -1] <- -1
   if (CI) {
-    fff$low <- intersperse_105(low)
-    fff$high <- intersperse_105(high)
+    fff$low <- intersperse_104(low)
+    fff$high <- intersperse_104(high)
     if (log) {
       fff$low <- fff$low / log(10)
       fff$high <- fff$high / log(10)
@@ -573,11 +561,6 @@ interaction_effect_plot_human <- function(y, at=c(-1,0,1), plot_main = '', log =
                     rep(fff$low[k],2), fff$high[k]),
               col = col1[9], border = NA)
     
-    polygon(x = c(line_X_axis[119] - 2, rep(line_X_axis[119],2), 
-                  rep(line_X_axis[119] - 2,2)),
-            y = c(rep(fff$high[119],2),
-                  rep(fff$low[119],2), fff$high[119]),
-            col = col1[10], border = NA)
   }
   
   col1 <- sapply(col, function(x) {
@@ -597,7 +580,6 @@ interaction_effect_plot_human <- function(y, at=c(-1,0,1), plot_main = '', log =
     lines(x = c(line_X_axis[k] - 2, line_X_axis[k]), y = rep(fff$bar[k],2), col = col1[8], lwd = lwd.means/2)
   for (k in c(113,115,117))
     lines(x = c(line_X_axis[k] - 2, line_X_axis[k]), y = rep(fff$bar[k],2), col = col1[9], lwd = lwd.means/2)
-  lines(x = c(line_X_axis[119] - 2, line_X_axis[119]), y = rep(fff$bar[119],2), col = col1[10], lwd = lwd.means/2)
   
   col2 <- sapply(col, function(x) {
     tmpf <- colorRampPalette(c(x, "black"))
@@ -620,8 +602,6 @@ interaction_effect_plot_human <- function(y, at=c(-1,0,1), plot_main = '', log =
       lines(x = c(line_X_axis[k] - 2, line_X_axis[k]), y = rep(fff$bar[k],2), col = col2[8], lwd = lwd.means)
     else if (k %in% c(113,115,117))
       lines(x = c(line_X_axis[k] - 2, line_X_axis[k]), y = rep(fff$bar[k],2), col = col2[9], lwd = lwd.means)
-    else if (k == 119)
-      lines(x = c(line_X_axis[k] - 2, line_X_axis[k]), y = rep(fff$bar[k],2), col = col2[10], lwd = lwd.means)
   }
   
   pos = 1
@@ -648,13 +628,3 @@ interaction_effect_plot_human <- function(y, at=c(-1,0,1), plot_main = '', log =
   
 }
 
-
-#  to.show <- data.frame(t(S_est))
-#  for (j in 1:nrow(beta_est)) {
-#    to.show <- cbind(to.show, S_est[nrow(S_est),] * exp(beta_est[j,]))
-#  }
-#  colnames(to.show) <- c(paste0('Sig',1:nrow(S_est)), paste0('Sig*',rownames(beta_est)))
-#  plot_fc(to.show, norm = n)
-#}
-
-# devtools::install_github("thomasp85/patchwork") for combining ggplots plots

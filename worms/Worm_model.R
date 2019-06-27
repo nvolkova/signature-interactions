@@ -2,7 +2,7 @@
 
 library(greta)
 library(bayesplot)
-source('plotting_functions.R')
+source('../plotting_functions.R')
 library(reshape2)
 library(ggplot2)
 library(openxlsx)
@@ -51,8 +51,7 @@ generation.function <- function(N) {
 # Create the design matrix
 
 interactions <- sapply(which(!is.na(data$Mutagen)), function(j) {
-  m <- substr(data$Mutagen[j],1,3)
-  if (m == 'Ari') m <- 'AA'
+  m <- as.character(data$Mutagen[j])
   return(paste(data$Genotype[j],m,sep=":"))
 })
 names(interactions) <- data$Sample[which(!is.na(data$Mutagen))]
@@ -72,33 +71,12 @@ X <- data.frame(sapply(unique(data$Genotype), function(x) as.numeric(data$Genoty
                   ifelse(is.na(data$Mutagen[match(z,data$Sample)]), 0, as.numeric(interactions[z] == x))))) # 2721 x 274
 rownames(X) <- data$Sample
 
-X.tmp <- data.frame(sapply(unique(data$Genotype), function(x) as.numeric(data$Genotype == x)) * sapply(data$Generation,generation.function),
-                sapply(unique(mutagens)[-1], function(x) as.numeric(mutagens == x)) * doses,
-                sapply(unique(interactions), function(x) sapply(rownames(Y), function(z) 
-                  ifelse(is.na(data$Mutagen[match(z,data$Sample)]), 0, as.numeric(interactions[z] == x))))*doses) # 2721 x 274
-#X.tmp$name <- rownames(X.tmp)
-#X.tmp <- X.tmp[,c(275,1:274)]
-write.csv(X.tmp, file = 'yoda1/X.full.csv', row.names = F)
-Y.tmp <- data.frame(rowSums(Y[,1:16]),rowSums(Y[,17:32]),
-               rowSums(Y[,33:48]),rowSums(Y[,49:64]),
-               rowSums(Y[,65:80]),rowSums(Y[,81:96]),
-               rowSums(Y[,97:98]),rowSums(Y[,99:104]),
-               rowSums(Y[,105:106]),rowSums(Y[,107:112]),
-               rowSums(Y[,113:119]))
-colnames(Y.tmp) <- c('C>A','C>G','C>T','T>A','T>C','T>G','MNV','D','DI','I','SV')
-#Y.tmp$name <- rownames(Y)
-#Y.tmp <- Y.tmp[,c(12,1:11)]
-write.csv(Y.tmp, file = 'yoda1/spectrum.csv', row.names = F)
-
-
 # Generations
 g = t(t(sapply(data$Generation,generation.function)))
-
 
 # Genotypes - indicator matrices
 G <-  X[,1:p]
 G1 <- X[,1:p]
-
 
 # Interactions and mutagens in N2 - indicator matrix for interactions with N2:mutagen
 W2 <- X[,(p+r+1):ncol(X)]
@@ -106,7 +84,7 @@ W2 <- X[,(p+r+1):ncol(X)]
 l = 208
 zero_exposure_samples <- data$Sample[!is.na(data$Mutagen) & data$Drug.concentration==0]
 for (j in 1:length(zero_exposure_samples)) {
-  if (as.character(data$Mutagen[match(zero_exposure_samples[j],data$Sample)])=="MMS/EMS/DMS")
+  if (interactions[zero_exposure_samples[j]]=="N2:MMS/EMS/DMS")
     next
   colname <- interactions[zero_exposure_samples[j]]
   colname <- gsub(x = colname, replacement = '.', pattern = '[ ]')
@@ -117,7 +95,8 @@ for (j in 1:length(zero_exposure_samples)) {
   colname <- gsub(x = colname, replacement = '.', pattern = '[(]')
   W2[match(zero_exposure_samples[j],data$Sample),colname] <- 1
 }
-
+if ("N2.MMS.EMS.DMS" %in% colnames(W2))
+  W2 <- W2[,-match("N2.MMS.EMS.DMS" , colnames(W2))]
 
 # Interactions only
 X <- X[,-grep('N2.',colnames(X),fixed=T)]
@@ -141,33 +120,9 @@ for (j in 1:ncol(Mall)) {
 # new doses
 doses = t(t(rowSums(Mall)))
 
-
-# there are 3 batches of EMS samples but the first two are mixed and there is no data to resolve it => add a random dose adjustment for them
-
-EMS_unknown_batch <- as.numeric( mutagens == 'EMS' )
-EMS_unknown_batch[grep('CD0796',rownames(Y))[1]:length(EMS_unknown_batch)] <- 0
-EMS.samples <- names(CD2Mutant)[EMS_unknown_batch>0]
-
-EMS_per_experiment <- rep(0,sum(EMS_unknown_batch))
-j = 1
-for (experiment in unique(interactions[EMS.samples])) {
-  inds <- which(interactions[EMS.samples] == experiment)
-  EMS_per_experiment[inds] <- j
-  if (experiment == 'parp-1:EMS') {
-    j = j+1
-    EMS_per_experiment[inds[c(9:length(inds))]] <- j
-  }
-  else if (experiment == 'him-6:EMS') {
-    j = j+1
-    EMS_per_experiment[inds[c(1,11:18)]] <- j
-  }
-  else if (length(inds)>9) {
-    j = j+1
-    EMS_per_experiment[inds[10:length(inds)]] <- j
-  }
-  j <- j+1
-}
-EMS_unknown_batch[EMS_unknown_batch>0] <- EMS_per_experiment
+# there are 5 batches of EMS samples but the first two are mixed and there is no data to resolve it => add a random dose adjustment for them
+EMS_batch <- as.numeric(data$Comments)
+EMS_batch[is.na(EMS_batch)] <- 0
 
 #############################################################################################################################################
 ################################################################## MODEL ####################################################################
@@ -232,17 +187,9 @@ dev.off()
 
 # check convergence
 
-pdf('beta_GH_convergence.pdf',12,8)
-
-mcmc_trace(ma.draws[,grep('beta_GH',colnames(ma.draws[[1]]))[sample(1:(m*ncol(ma.X)),9)]])
-
-mcmc_trace(ma.draws[,grep('beta_GH',colnames(ma.draws[[1]]))[sample(1:(m*ncol(ma.X)),9)]])
-
 mcmc_trace(ma.draws[,grep('beta_GH',colnames(ma.draws[[1]]))[sample(1:(m*ncol(ma.X)),9)]])
 
 mcmc_trace(ma.draws[,grep('sigma_GH',colnames(ma.draws[[1]])),drop=F])
-
-dev.off()
 
 
 #############################################################################################################################################
@@ -284,12 +231,11 @@ alpha_G = normal(mean = 0, sd=sigma_G, truncation = c(0,Inf), dim = c(l,1))
 r_G = W2 %*% alpha_G
 
 # Dose adjusment for EMS mixed batches
-W_EMS <- matrix(0,nrow = n, ncol = length(unique(EMS_unknown_batch))-1)
+W_EMS <- matrix(0,nrow = n, ncol = 4) # 5 batches total, so 4 adjustments
 for (j in 1:ncol(W_EMS))
-  W_EMS[which(EMS_unknown_batch == j),j] <- 1
-EMS_dose_adjustment = normal(mean = 0, sd = 0.5, dim = c(length(unique(EMS_unknown_batch))-1,1))
+  W_EMS[which(EMS_batch == j+1),j] <- 1
+EMS_dose_adjustment = normal(mean = 0, sd = 0.5, dim = c(4,1))
 r_doses = exp(W_EMS %*% EMS_dose_adjustment)
-
 
 # genotype aplification by mutagens
 sigma_G_M = 0.5
@@ -315,7 +261,6 @@ model_full <- model(beta_GH, beta_M, beta_I_2, alpha_G, alpha_G_M, sigma2_I_2, s
 draws.step2 <- mcmc(model_full, warmup = 2000, n_samples = 5000, thin = 2)
 
 # Convergence diagnostics
-pdf('MUconvergence.pdf',12,8)
 mcmc_trace(draws.step2[,grep('beta_M',colnames(draws.step2[[1]]))[sample(1:(r*m),16)]])
 mcmc_trace(draws.step2[,grep('beta_I',colnames(draws.step2[[1]]))[sample(1:(s*m),16)]])
 mcmc_trace(draws.step2[,grep('alpha_G',colnames(draws.step2[[1]]))[sample(1:l,16)]])
@@ -323,7 +268,6 @@ mcmc_trace(draws.step2[,grep('alpha_G_M',colnames(draws.step2[[1]]))[sample(1:s,
 mcmc_trace(draws.step2[,grep('sigma2_I_2',colnames(draws.step2[[1]]))[sample(1:s,16)],drop=F])
 mcmc_trace(draws.step2[,grep('sigma_M',colnames(draws.step2[[1]])),drop=F])
 mcmc_trace(draws.step2[,grep('EMS',colnames(draws.step2[[1]]))[sample(1:sum(EMS_unknown_batch),16)]])
-dev.off()
 
 # Extract point estimates for parameter
 draws_all <- do.call('rbind',draws.step2)
@@ -335,19 +279,18 @@ alpha_GM_greta_low <- apply(draws_all[,grep('alpha_G_M',colnames(draws_all))],2,
 alpha_GM_greta_high <- apply(draws_all[,grep('alpha_G_M',colnames(draws_all))],2,quantile,0.975)
 alpha_GM_greta_var <- apply(draws_all[,grep('alpha_G_M',colnames(draws_all))],2,var)
 
-pdf('Dose_dependent_genotype_amplification_coefficient_greta_090519.pdf',18,8)
+# Dose dependent genotype amplification coefficient
 par(mar = c(8,4,2,2))
 foo <- barplot(t(alpha_GM_greta)[order(alpha_GM_greta)], ylim = c(0,max(alpha_GM_greta_high)),col = 'white')
 axis(side = 1, at = foo, labels = colnames(W)[order(alpha_GM_greta)], cex.axis = 0.4, las = 2)
 arrows(x0 = foo, y0 = t(alpha_GM_greta_low)[order(alpha_GM_greta)], y1 = t(alpha_GM_greta_high)[order(alpha_GM_greta)], col ='darkgrey', length=0.01, lwd=2, angle=90)
-dev.off()
 
-pdf('Additional_generation_per_sample_greta_090519.pdf',18,8)
+
+# Additional generation per sample 
 par(mar = c(8,4,2,2))
 foo <- barplot(t(alpha_G_greta)[order(alpha_G_greta)], ylim = c(0,max(alpha_G_greta_high)),col = 'white')
 axis(side = 1, at = foo, labels = colnames(W2)[order(alpha_G_greta)], cex.axis = 0.4, las = 2)
 arrows(x0 = foo, y0 = t(alpha_G_greta_low)[order(alpha_G_greta)], y1 = t(alpha_G_greta_high)[order(alpha_G_greta)], col ='darkgrey', length=0.01, lwd=2, angle=90)
-dev.off()
 
 beta_GH_greta_full <- matrix(colMeans(exp(draws_all[,grep('beta_GH',colnames(draws_all))])), nrow = m, ncol = p)
 beta_GH_greta_full_var <- matrix(apply(exp(draws_all[,grep('beta_GH',colnames(draws_all))]),2,var), nrow = m, ncol = p)
@@ -358,6 +301,7 @@ colnames(beta_GH_greta_full) <- colnames(G1)
 colnames(beta_GH_greta_full_low) <- colnames(G1)
 colnames(beta_GH_greta_full_high) <- colnames(G1)
 
+# Plot some examples
 clrs = c("#2EBAED","#000000","#DE1C14","#D4D2D2","#ADCC54","#F0D0CE","brown","#8DD3C7","goldenrod","#BEBADA","darkmagenta")
 plot_dnvhugesig_wb((beta_GH_greta_full[,1:10]), CI=T, col = clrs, 
                    low = (beta_GH_greta_full_low[,1:10]),
@@ -387,10 +331,10 @@ EMS_dose_adjustment_greta_high = apply(draws_all[,grep('EMS',colnames(draws.step
 
 # Check the quality of fit
 mu <- (as.matrix(G1) %*% t((beta_GH_greta_full))) * 
-  ((g + as.matrix(W2) %*% t(t(alpha_G_greta)) + (doses * exp(W_EMS * EMS_dose_adjustment_greta)) * (as.matrix(W) %*% t(t(alpha_GM_greta)))) 
+  ((g + as.matrix(W2) %*% t(t(alpha_G_greta)) + (doses * exp(W_EMS %*% t(t(EMS_dose_adjustment_greta)))) * (as.matrix(W) %*% t(t(alpha_GM_greta)))) 
    %*% matrix(1,nrow = 1,ncol=119)) +
   (as.matrix(M1) %*% t((beta_M_greta_full))) * exp(as.matrix(W) %*% t(beta_I_greta_full)) *
-  ((doses * exp(W_EMS * EMS_dose_adjustment_greta)) %*% matrix(1,nrow = 1,ncol=119))
+  ((doses * exp(W_EMS %*% t(t(EMS_dose_adjustment_greta)))) %*% matrix(1,nrow = 1,ncol=119))
 
 # -logLik
 divergence <- function (a,b) {
@@ -417,7 +361,7 @@ rownames(beta_M_greta_full_high) <- colnames(Y)
 names(alpha_G_greta) <- colnames(W2)
 names(alpha_G_greta_low) <- colnames(W2)
 names(alpha_G_greta_high) <- colnames(W2)
-names(EMS_dose_adjustment_greta) = names(EMS_dose_adjustment_greta_low) = names(EMS_dose_adjustment_greta_high) <- rown
+names(EMS_dose_adjustment_greta) = names(EMS_dose_adjustment_greta_low) = names(EMS_dose_adjustment_greta_high) <- paste0('batch',2:5)
 l <- list(beta_GH_greta_full, beta_GH_greta_full_low, beta_GH_greta_full_high,
           beta_M_greta_full, beta_M_greta_full_low, beta_M_greta_full_high,
           data.frame(mean=alpha_G_greta,low=alpha_G_greta_low,high=alpha_G_greta_high),

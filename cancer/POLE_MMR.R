@@ -14,7 +14,6 @@ library(VariantAnnotation)
 library(MASS)
 source('../useful_functions.R')
 library(ggplot2)
-library(rstan)
 library(reshape2)
 source('../plotting_functions.R')
 library(greta)
@@ -61,7 +60,7 @@ data$POLE_2 <- data$whichPOLE == 'p.V411L'
 # go to http://genomeportal.stanford.edu/pan-tcga/data_download
 # select UCEC
 # press Go
-msi <- read.table('~/Downloads/UCEC/UCEC_2015-04-02_ClinicalParameters.txt', sep='\t', header=T)
+msi <- read.table('UCEC/UCEC_2015-04-02_ClinicalParameters.txt', sep='\t', header=T)
 data$MMR <- msi$MSIstatus[match(substr(ucec,1,12),msi$SampleCode)]
 data$MMR <- data$MMR=='MSI-H'
 
@@ -77,17 +76,10 @@ ucec.data <- list(
   R = 104,
   N = length(ucec),
   M = max(rowSums(donor.mut.mat[ucec,])),
-  S = 6,
+  S = 5,
   X = cbind(as.numeric(data$POLE_1), as.numeric(data$POLE_2), as.numeric(data$POLE * data$MMR > 0)),
   K = 3
 )
-
-save(ucec.data, file = 'yoda3/ucec.data.newest.RData')
-
-ucec.data[['K']] <- 1
-ucec.data[['S']] <- 4
-ucec.data[['X']] <- ucec.data[['X']][,3,drop=F]
-#ucec.data[['X']][ucec.data[['X']][,3]==1,1:2] <- 0
 
 S <- variable(lower = 0, upper = 1, dim = c(ucec.data[['S']],ucec.data[['R']]))
 S <- S / (greta::rowSums(S) %*% matrix(1,nrow = 1, ncol = ucec.data[['R']]))
@@ -108,17 +100,13 @@ m <- model(S,E,beta)
 # sampling
 draws <- mcmc(m,n_samples = 500, warmup = 500,chains=4)
 
-save(draws,ucec.data,file='UCEC_draws_sigma_fit_29042019.RData') # sigma fitted at 0.5!
-
-#load('yoda/UCEC_draws_no_hierarchy_normalized_sigma_estimated_size_50_sigs_7.RData')
-
 # Visualize the draws
 library(bayesplot)
 mcmc_trace(draws[,grep('S',colnames(draws[[1]]))[sample(1:(ucec.data[['S']]*104),9)]])
 mcmc_trace(draws[,grep('beta',colnames(draws[[1]]))[1:9]])
 
 # inspect the chains - may swap POLE and MMR
-draws_all <- draws[[2]]
+draws_all <- draws[[4]]
 
 S_est <- matrix(colMeans(draws_all[,grep('S',colnames(draws_all), fixed = T)]), nrow = ucec.data[['S']], ncol = ucec.data[['R']])
 S_low <- matrix(apply(draws_all[,grep('S',colnames(draws_all), fixed = T)],2,quantile,0.025), nrow = ucec.data[['S']], ncol = ucec.data[['R']])
@@ -156,32 +144,13 @@ mtext(side=3, paste0("P = ",signif(summary(fit)$coef[2,4],1)))
 dev.off()
 
 
-
 mu <- E_est %*% S_est
 
 plot(as.vector(ucec.data[['y']]),
      as.vector(mu), pch = 16)
 abline(a=0,b=1,col='red',lty=2)
 
-pdf('POLE_LFC.pdf',12,4)
-  interaction_effect_plot_human(beta_est[3,], lwd = 2, CI = T, low = beta_low[3,], high = beta_high[3,], at = c(-1,0,1), labels=c('<0.1',1,10))
-dev.off()
-pdf('POLE_all_signatures.pdf',15,15)
-tmp <- cbind(t(S_est), S_est[ucec.data[['S']],] * exp(beta_est[1,]),S_est[ucec.data[['S']],] * exp(beta_est[2,]),S_est[ucec.data[['S']],] * exp(beta_est[3,]))
-colnames(tmp) <- c('MMR-2','BRCA', 'APOBEC', 'MMR', 'POLE', 'POLE + 1', 'POLE + 2', 'POLE + MMR')
-plot_subindel_wb(tmp)
-dev.off()
-pdf('POLE_all_signatures.pdf',15,15)
-tmp <- cbind(t(S_est), S_est[ucec.data[['S']],] * exp(beta_est[1,]),S_est[ucec.data[['S']],] * exp(beta_est[2,]),S_est[ucec.data[['S']],] * exp(beta_est[3,]))
-colnames(tmp) <- c('MMR-2','BRCA', 'APOBEC', 'MMR', 'POLE', 'POLE + 1', 'POLE + 2', 'POLE + MMR')
-plot_subindel_wb(tmp)
-dev.off()
-pdf('POLE_some_signatures.pdf',15,5)
-tmp <- data.frame(S_est[5,], S_est[5,] * exp(beta_est[3,]))
-colnames(tmp) <- c('POLE','POLE + MMR')
-plot_subindel_wb(tmp)
-dev.off()
-
+# ids - clinical data on all samples from ICGC (donot.tsv)
 AGE = ids$donor_age_at_diagnosis[match(substr(rownames(ucec.data[['y']]),1,12), ids$submitted_donor_id)]
 S_var <- matrix(apply(draws_all[,grep('S',colnames(draws_all), fixed = T)],2,var), nrow = ucec.data[['S']], ncol = ucec.data[['R']])
 tmp <- data.frame(S_est[6,],
@@ -208,8 +177,8 @@ tmp$`POLE + MMR` <- tmp$`POLE + MMR` * muts_average / sum(tmp$`POLE + MMR`)
 interaction_effect_plot_human(log10(tmp$`POLE + MMR` / tmp$POLE),
                               CI = F, log = T, at = c(-1,0,1))
 
-#pdf('AA_signatures.pdf',12,5)
-pdf('POLE_some_signatures.pdf',12,5)
+
+pdf('POLE_signatures.pdf',12,5)
 plot_subindel_wb(tmp,CI = T,low = tmp_low, high = tmp_up, ymax = max(tmp_up), norm = F) + theme(panel.grid = element_blank())
 dev.off()
 

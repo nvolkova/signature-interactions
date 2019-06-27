@@ -15,6 +15,7 @@ new_cancer_signatures <- read.csv('sigProfiler_exome_SBS_signatures.csv')
 
 # Read in the matrix with mutation counts and with information on samples
 bigmat <- read.table('TCGA.caveman.matrix.dat',sep='\t')
+colnames(bigmat) <- c(types.full, indels)
 metadata <- read.table('TCGA_caveman_patients_to_files.dat', sep='\t', header=T)
 # restrictions
 bigmat <- bigmat[rowSums(bigmat[,1:96])>50 & rowSums(bigmat[,1:96]) < 10000,]
@@ -38,8 +39,6 @@ data$REVUNG <- factor(c(rep(0,sum(REVUNG==0)),rep(1,sum(REVUNG==1))))
 levels(data$REVUNG) <- c("wt","mut")
 fit <- glm(cbind(data$`T[C>G]N`,data$`T[C>T]N`) ~ data$REVUNG,  family=stats::binomial)
 summary(fit)
-#fit <- glm(cbind(data$`T[C>R]N`,data$`T[C>T]N`) ~ data$REVUNG,  family=stats::binomial)
-#summary(fit) # also significant
 
 library(beeswarm)
 pdf('APOBEC_boxplot.pdf',3,4)
@@ -156,7 +155,7 @@ interaction_effect_plot_human(c(log(tmp$`APOBEC + muts` / tmp$APOBEC),0), lwd = 
                               plot_main = 'APOBEC change w.r.t. REV1/UNG mutations')
 dev.off()
 
-
+# Same per year
 metadata <- read.table('TCGA_caveman_patients_to_files.dat', sep = '\t', header = T)
 ids <- read.table('~/Downloads/ICGCtoTCGA.tsv', sep = '\t', header = T)
 AGE <- ids$donor_age_at_diagnosis[match(metadata$patient_id[match(rownames(apobec_data[['y']]),
@@ -174,7 +173,7 @@ tmp$`APOBEC + muts` <- tmp$`APOBEC + muts` * muts_average / sum(tmp$`APOBEC + mu
 interaction_effect_plot_human(c(log10(tmp$`APOBEC + muts` / tmp$APOBEC),0),
                               CI = F, log = T, at = c(-1,0,1))
 
-plot_subindel_wb(tmp,CI = T,low = tmp_low, high = tmp_up, ymax = max(tmp_up), norm = F) + theme(panel.grid = element_blank())
+plot_subindel_wb(tmp,CI = T,low = tmp_low, high = tmp_up, ymax = 0.2, norm = F) + theme(panel.grid = element_blank())
 
 sd_ap_lfc <- sqrt(1/tmp$`APOBEC + muts`**2 * var_tmp * muts_average**2 + 
                     1/tmp$APOBEC**2  * S_var[1,] * no_muts_average**2)

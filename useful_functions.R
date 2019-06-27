@@ -270,3 +270,35 @@ filter.breakpoints <- function(SV, reference) {
   return(SV)
 }
 
+# Poisson regression for signature fitting
+nmSolve <- function(D, P, maxIter = 10000, tol=1e-5, div.err=1e-7) {
+  n <- nrow(D)
+  mask <- !is.na(D)
+  m <- ncol(D)
+  s <- ncol(P)
+  rP <- rep(colSums(P), m)
+  tP <- t(P)
+  D <- as.matrix(D)
+  P <- as.matrix(P)
+  E1 <- E2 <- matrix(runif(s * m, 1e-3, 1), ncol = m)
+  err <- 2*tol
+  D[is.na(D)] <- 0
+  
+  iter <- 1
+  divergence.old <- mean(D*log(D/(P %*% (E2 + .Machine$double.eps))) - D + P%*%E2, na.rm=T)
+  div.change <- 2 * div.err
+  
+  while (iter < maxIter & err > tol & abs(div.change) > div.err) {
+    E1 <- E2
+    E2 <- E1 * (tP %*% ((mask*D)/(mask*(P %*% (E1 + .Machine$double.eps)) + .Machine$double.eps)))/rP
+    iter <- iter + 1
+    err <- mean(abs(E2 - E1)/(E1+.Machine$double.eps), na.rm=TRUE)
+    divergence <- mean(D*log(D/(P %*% (E2 + .Machine$double.eps))) - D + P%*%E2, na.rm=T) # KL distance from D to P%*%E2
+    div.change <- divergence.old - divergence
+    divergence.old = divergence
+    if(iter %% 100 == 0) cat(round(-log10(err)))
+  }
+  cat("\n")
+  if(iter == maxIter) warning(paste("No convergence after",iter, "iterations."))
+  E2
+}
