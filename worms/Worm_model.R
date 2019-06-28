@@ -227,7 +227,7 @@ beta_M = lognormal(meanlog = matrix(0,nrow = m,ncol=r), sdlog = matrix(1,nrow=m,
 # Adjustment of generations (account for the fact that mutagen exposure samples are not necessarily 
 # 1st generation after knockout / after splitting them and their mates with different expousre dose)
 sigma_G = 0.5
-alpha_G = normal(mean = 0, sd=sigma_G, truncation = c(0,Inf), dim = c(l,1))
+alpha_G = lognormal(mean = 0, sd=sigma_G, truncation = c(0,Inf), dim = c(l,1))
 r_G = W2 %*% alpha_G
 
 # Dose adjusment for EMS mixed batches
@@ -239,7 +239,7 @@ r_doses = exp(W_EMS %*% EMS_dose_adjustment)
 
 # genotype aplification by mutagens
 sigma_G_M = 0.5
-alpha_G_M = normal(mean = 0, sd=sigma_G_M, truncation = c(0,Inf), dim=c(s,1))
+alpha_G_M = lognormal(mean = 0, sd=sigma_G_M, truncation = c(0,Inf), dim=c(s,1))
 r_GM = W %*% alpha_G_M
 
 # Interaction term - regularized
@@ -361,11 +361,14 @@ rownames(beta_M_greta_full_high) <- colnames(Y)
 names(alpha_G_greta) <- colnames(W2)
 names(alpha_G_greta_low) <- colnames(W2)
 names(alpha_G_greta_high) <- colnames(W2)
+names(alpha_G_greta) <- colnames(W)
+names(alpha_G_greta_low) <- colnames(W)
+names(alpha_G_greta_high) <- colnames(W2)
 names(EMS_dose_adjustment_greta) = names(EMS_dose_adjustment_greta_low) = names(EMS_dose_adjustment_greta_high) <- paste0('batch',2:5)
 l <- list(beta_GH_greta_full, beta_GH_greta_full_low, beta_GH_greta_full_high,
           beta_M_greta_full, beta_M_greta_full_low, beta_M_greta_full_high,
           data.frame(mean=alpha_G_greta,low=alpha_G_greta_low,high=alpha_G_greta_high),
-          data.frame(mean=alpha_G_greta,low=alpha_G_greta_low,high=alpha_G_greta_high))
+          data.frame(mean=EMS_dose_adjustment_greta,low=EMS_dose_adjustment_greta_low,high=EMS_dose_adjustment_greta_high))
 openxlsx::write.xlsx(l, file="~/Supplementary Table 2. Signatures of DNA repair deficiencies and mutagen exposures.xlsx",
                      colNames = T, rowNames = T,
                      sheetName = c('Genotypes-mean', "Genotypes-low","Genotypes-high",
@@ -382,4 +385,4 @@ l <- list(beta_I_greta_full, beta_I_greta_full_low, beta_I_greta_full_high,
           data.frame(mean=alpha_GM_greta,low=alpha_GM_greta_low,high=alpha_GM_greta_high))
 openxlsx::write.xlsx(l, file="~/Supplementary Table 3. Interaction effects beta_I on the mutagen signatures and alpha_GM on genotype signatures.xlsx",
                      colNames = T, rowNames = T,
-                     sheetName = c('Log-Beta-means', "Log-Beta-low","Log-Beta-high",'Alpha'))
+                     sheetName = c('Log-Beta-means', "Log-Beta-low","Log-Beta-high",'Dose-dependent b_I'))

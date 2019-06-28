@@ -205,8 +205,8 @@ pdf('factor_group_contributions.pdf',width = 8,height = 6)
 par(mar = c(8,5,5,5))
 f <- barplot(c(sum(rowSums(genetic_cont)[rowSums(W)>0]), 
                sum(rowSums(as.matrix(Mall) %*% t((beta_M_greta_full)))[rowSums(W)>0]), 
-               sum(matrix_of_dif[matrix_of_dif>0]),
-               sum(matrix_of_dif[matrix_of_dif<0])),
+               sum(matrix_of_dif[rowSums(W)>0,][matrix_of_dif[rowSums(W)>0,]>0]),
+               sum(matrix_of_dif[rowSums(W)>0,][matrix_of_dif[rowSums(W)>0,]<0])),
              main = 'Mutations attributed to different factors',
              col = c('palegreen3', 'skyblue', 'lightpink', 'darksalmon'),
              names.arg = c('Endogenous\n processes', 'Exogenous\n mutagens', 'Interactions+','Interactions-'),
