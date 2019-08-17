@@ -6,7 +6,8 @@ Human analysis part requires a matrix with TCGA variants, and a metadata matrix 
 
 Session information for the analyses:
 
-``R version 3.5.1 (2018-07-02)
+```
+R version 3.5.1 (2018-07-02)
 
 Matrix products: default
 
@@ -34,5 +35,4 @@ loaded via a namespace (and not attached):
 [51] codetools_0.2-15         listenv_0.7.0            future_1.12.0            jsonlite_1.6             coda_0.19-2         
 [56] tfruns_1.4               whisker_0.3-2            reticulate_1.11.1        parallel_3.5.1           base64enc_0.1-3
 [61] tensorflow_1.10          globals_0.12.4
-
-``
+```
