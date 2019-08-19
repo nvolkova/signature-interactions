@@ -15,15 +15,16 @@ attached base packages:
 [1] stats4    parallel  stats     graphics  grDevices utils     datasets  methods   base   
 
 other attached packages:
- [1] xlsx_0.6.1                              TxDb.Hsapiens.UCSC.hg19.knownGene_3.2.2 GenomicFeatures_1.36.0                 
- [4] AnnotationDbi_1.46.0                    BSgenome.Hsapiens.UCSC.hg19_1.4.0       BSgenome_1.52.0                        
- [7] rtracklayer_1.40.2                      dndscv_0.0.1.0                          bayesplot_1.6.0                        
-[10] RColorBrewer_1.1-2                      greta_0.2.3                             reshape2_1.4.3                         
-[13] ggplot2_3.1.1                           VariantAnnotation_1.30.0                Rsamtools_2.0.0                        
-[16] Biostrings_2.52.0                       XVector_0.24.0                          SummarizedExperiment_1.14.0            
-[19] DelayedArray_0.10.0                     BiocParallel_1.18.0                     matrixStats_0.54.0                     
-[22] Biobase_2.44.0                          GenomicRanges_1.36.0                    GenomeInfoDb_1.20.0                    
-[25] IRanges_2.18.0                          S4Vectors_0.22.0                        BiocGenerics_0.30.0                    
+ [1] deconstructSigs_1.8.0                   org.Hs.eg.db_3.8.2                      xlsx_0.6.1                             
+ [4] TxDb.Hsapiens.UCSC.hg19.knownGene_3.2.2 GenomicFeatures_1.36.0                  AnnotationDbi_1.46.0                   
+ [7] BSgenome.Hsapiens.UCSC.hg19_1.4.0       BSgenome_1.52.0                         rtracklayer_1.40.2                     
+[10] dndscv_0.0.1.0                          bayesplot_1.6.0                         RColorBrewer_1.1-2                     
+[13] greta_0.2.3                             reshape2_1.4.3                          ggplot2_3.1.1                          
+[16] VariantAnnotation_1.30.0                Rsamtools_2.0.0                         Biostrings_2.52.0                      
+[19] XVector_0.24.0                          SummarizedExperiment_1.14.0             DelayedArray_0.10.0                    
+[22] BiocParallel_1.18.0                     matrixStats_0.54.0                      Biobase_2.44.0                         
+[25] GenomicRanges_1.36.0                    GenomeInfoDb_1.20.0                     IRanges_2.18.0                         
+[28] S4Vectors_0.22.0                        BiocGenerics_0.30.0                   
 
 loaded via a namespace (and not attached):
  [1] httr_1.4.0               bit64_0.9-7              jsonlite_1.6             assertthat_0.2.1         xlsxjars_0.6.1          
