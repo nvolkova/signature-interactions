@@ -2,14 +2,15 @@
 
 library(greta)
 library(bayesplot)
-source('../plotting_functions.R')
+#source('~/Interaction paper/signature-interactions/plotting_functions.R')
+source('Mutation accumulation/dnarepairdefiiencies/plotting_functions.R')
 library(reshape2)
 library(ggplot2)
 library(openxlsx)
 
 
 # Get the annotations
-data <- openxlsx::read.xlsx("~/Supplementary Table 1. Sample description for C.elegans experiments.xlsx", sheet = 2)
+data <- openxlsx::read.xlsx("~/Downloads/Supplementary Table 1.xlsx", sheet = 2, startRow = 2)
 data$Sample <- as.character(data$Sample)
 data$Genotype <- as.character(data$Genotype)
 CD2Mutant <- sapply(1:nrow(data), function(j) {
@@ -25,16 +26,18 @@ names(CD2Mutant) <- data$Sample
 
 
 # Mutation counts
-Y <- openxlsx::read.xlsx("~/Supplementary Table 1. Sample description for C.elegans experiments.xlsx", sheet = 3, rowNames = T)
-
+Y <- openxlsx::read.xlsx("~/Downloads/Supplementary Table 1.xlsx", sheet = 3, startRow = 2, rowNames = T)
 
 # get rid of reference samples 
 CD2Mutant<- CD2Mutant[rownames(Y)] 
 data <- data[match(names(CD2Mutant),data$Sample),]
 
+#Y <- cbind(rowSums(Y[,1:16]),rowSums(Y[,17:32]),rowSums(Y[,33:48]),rowSums(Y[49:64]),rowSums(Y[,65:80]),rowSums(Y[,81:96]),
+#           rowSums(Y[,97:98]),rowSums(Y[,99:104]),rowSums(Y[,105:106]),rowSums(Y[,107:112]),rowSums(Y[,113:119]))
+#colnames(Y) <- c('C>A','C>G','C>T','T>A','T>C','T>G','MNV','D','DI','I','SV')
 
 # dimensions
-m=119;p=54;r=12;s=196;n=2721
+m=119;p=54;r=12;s=196;n=nrow(Y)
 
 
 # Adjust generations for 25%/50%/25% pbty of a heterozygous mutation to be fixed/remain/lost
@@ -68,11 +71,12 @@ mutagens[mutagens=='MMS/EMS/DMS'] <- 'no' # N2 zero-exposure samples
 X <- data.frame(sapply(unique(data$Genotype), function(x) as.numeric(data$Genotype == x)),
                 sapply(unique(mutagens)[-1], function(x) as.numeric(mutagens == x)),
                 sapply(unique(interactions), function(x) sapply(rownames(Y), function(z) 
-                  ifelse(is.na(data$Mutagen[match(z,data$Sample)]), 0, as.numeric(interactions[z] == x))))) # 2721 x 274
+                  ifelse(is.na(data$Mutagen[match(z,data$Sample)]), 0, as.numeric(interactions[z] == x))))) 
 rownames(X) <- data$Sample
 
 # Generations
 g = t(t(sapply(data$Generation,generation.function)))
+g[g[,1] == 0,1] <- 1
 
 # Genotypes - indicator matrices
 G <-  X[,1:p]
@@ -81,7 +85,7 @@ G1 <- X[,1:p]
 # Interactions and mutagens in N2 - indicator matrix for interactions with N2:mutagen
 W2 <- X[,(p+r+1):ncol(X)]
 # Genotype per interaction matrix
-l = 208
+l = s + r
 zero_exposure_samples <- data$Sample[!is.na(data$Mutagen) & data$Drug.concentration==0]
 for (j in 1:length(zero_exposure_samples)) {
   if (interactions[zero_exposure_samples[j]]=="N2:MMS/EMS/DMS")
@@ -116,7 +120,7 @@ for (j in 1:ncol(Mall)) {
   avdose <- c(avdose, mean(Mall[Mall[,j]>0,j]))
   Mall[,j] = Mall[,j] / mean(Mall[Mall[,j]>0,j])
 }
-
+names(avdose) <- colnames(Mall)
 # new doses
 doses = t(t(rowSums(Mall)))
 
@@ -133,6 +137,10 @@ ma.samples <- data$Sample[is.na(data$Mutagen) & data$Generation>0]
 ma.X <- X[ma.samples,] * sapply(data$Generation[match(ma.samples, data$Sample)],generation.function)
 ma.X <- ma.X[,colSums(ma.X)>0]
 ma.Y <- Y[ma.samples,]
+
+save(ma.Y, ma.X, ma.samples, m, file = 'yoda1/MA_short_data.RData')
+
+save(Y, X, m, p, r, s, W, W2, M1, Mall, g, G1, EMS_batch, avdose, doses, l, G, n, file = 'yoda1/Mutagen_greta_data.RData')
 
 # Specify the model
 
@@ -209,11 +217,11 @@ new_rates <- matrix(1,nrow = 119, ncol = ncol(G1))
 for (j in 1:ncol(G1)) {
   if (colnames(G1)[j] %in% colnames(ma.X)) {
     new_shapes[,j] <- shapes[,match(colnames(G1)[j],colnames(ma.X))]
-    new_rates[,j] <- shapes[,match(colnames(G1)[j],colnames(ma.X))]
+    new_rates[,j] <- rates[,match(colnames(G1)[j],colnames(ma.X))]
   }
   else {
     new_shapes[,j] <- shapes[,match('N2',colnames(ma.X))]
-    new_rates[,j] <- shapes[,match('N2',colnames(ma.X))]
+    new_rates[,j] <- rates[,match('N2',colnames(ma.X))]
   }
 }
 
@@ -244,18 +252,20 @@ r_GM = W %*% alpha_G_M
 
 # Interaction term - regularized
 sigma2_I_2 = gamma(shape = 1, rate = 1, dim = c(1,s))
-beta_I_2 = laplace(mu = matrix(0,nrow = m,ncol=s), sigma = matrix(1,nrow=m,ncol=1) %*% sigma2_I_2)
+beta_I_2 = laplace(mu = matrix(0,nrow = m,ncol=s), matrix(1,nrow=m,ncol=1) %*% sigma2_I_2)
 
 
 # Bring everything together
 mu_GH = as.matrix(G1) %*% t(beta_GH) # genetic background
-mu_M = M1 %*% t(beta_M) # mutagen contribution
-mu1 = exp(W %*% t(beta_I_2)) # multiplicative genotype - mutation interaction
-mu =  mu_GH * ((g + r_G + (r_doses*doses) * r_GM) %*% matrix(1,nrow=1,ncol=m)) + mu1 * mu_M * ((doses*r_doses) %*% matrix(1,nrow=1,ncol=m))
+M1 <- Mall>0
+mu_M = as.matrix(M1) %*% t(beta_M) # mutagen contribution
+mu1 = exp(as.matrix(W) %*% t(beta_I_2)) # multiplicative genotype - mutation interaction
+mu =  mu_GH * ((g + r_G + (r_doses*doses) * r_GM) %*% matrix(1,nrow=1,ncol=m)) +
+  mu1 * mu_M * ((doses*r_doses) %*% matrix(1,nrow=1,ncol=m))
 size = 100 # account for a bit of overdispersion
 prob = size / (size + mu)
 distribution(Y) = negative_binomial(size = size, prob = prob) # fit negative binomial distribution to the counts
-model_full <- model(beta_GH, beta_M, beta_I_2, alpha_G, alpha_G_M, sigma2_I_2, sigma_M, EMS_dose_adjustment) # get back all the coefficients
+model_full <- model(beta_M, beta_GH, sigma_M, beta_I_2, sigma2_I_2, beta_GH, alpha_G, alpha_G_M, EMS_dose_adjustment) # get back all the coefficients
 
 # Do the HMC magic
 draws.step2 <- mcmc(model_full, warmup = 2000, n_samples = 5000, thin = 2)

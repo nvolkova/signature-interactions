@@ -31,7 +31,7 @@ CD2Mutant <- CD2Mutant[sort(names(CD2Mutant))]
 ```
 Upload the spectra
 ```{r}
-new.spectrum <- read.xlsx(xlsxFile = "Supplementary Table 1. Sample description for C.elegans experiments.xlsx", sheet = 3, rowNames = T)
+new.spectrum <- read.xlsx(xlsxFile = "~/Supplementary Table 1. Sample description for C.elegans experiments.xlsx", sheet = 3, rowNames = T)
 CD2Mutant <- CD2Mutant[rownames(new.spectrum)] # remove reference worms
 data <- data[match(names(CD2Mutant),data$Sample),]
 head(new.spectrum[,1:10])
@@ -343,12 +343,16 @@ coef(summary(model)) # Mutation rate of about 3.62 indel/SV mutations per 80 Gy
 
 # Making boxplots for number of mutations
 ```{r}
-z <-'polk-1:MMS' 
-tmp <- Y[rev(grep(z,CD2Mutant)),]
+pdf('xpc.1.Cis.barplot.pdf',6,5)
+tmp <- (Y[rev(grep('xpc-1:Cis',CD2Mutant[rownames(Y)])),])
+doses <- data$Drug.concentration[match(rownames(tmp),data$Sample)]
+tmp <- tmp[order(doses, decreasing = T),]
+doses <- doses[order(doses, decreasing = T)]
 f <- barplot(t(cbind(rowSums(tmp[,1:16]),rowSums(tmp[,17:32]),rowSums(tmp[,33:48]),
               rowSums(tmp[,49:64]),rowSums(tmp[,65:80]),rowSums(tmp[,81:96]),
               rowSums(tmp[,97:98]),rowSums(tmp[,99:104]),rowSums(tmp[,105:106]),
               rowSums(tmp[,107:112]),rowSums(tmp[,113:119]))), col = (clrs),
-        main = z, horiz = T, yaxt = 'n', xlim = c(0,700), border = NA)
-axis(side = 2, at = f, labels = data$Drug.concentration[rev(grep(z,CD2Mutant))], las = 2)
+        main = z, horiz = T, yaxt = 'n', xlim = c(0,100), border = NA)
+axis(side = 2, at = f, labels = doses, las = 2)
+dev.off()
 ```

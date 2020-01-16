@@ -185,6 +185,7 @@ mean_ins <- list()
 mean_ins_sd <- list()
 mmr_mean_ins <- list()
 mmr_mean_ins_sd <- list()
+ids <- read.table('~/Downloads/ICGCtoTCGA.tsv', sep = '\t', header = T)
 age <- ids$donor_age_at_diagnosis[match(substr(alternative_rownames_bigmat,1,12),ids$submitted_donor_id)]
 ctype <- sapply(alternative_rownames_bigmat, function(x) metadata$project[match(x,metadata$tumour)])
 for (proj in c('COAD','BRCA','CESC','HNSC','STAD','LIHC','LUSC','PRAD','UCEC')) {
