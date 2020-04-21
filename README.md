@@ -1,6 +1,6 @@
 # Codes accompanying *Mutational signatures are jointly shaped by DNA damage and repair*
 
-Codes and data for the manuscript "Mutational signatures are jointly shaped by DNA damage and repair" (accepted in Nature Communications 2020).
+Codes and data for the manuscript "Mutational signatures are jointly shaped by DNA damage and repair" (accepted in Nature Communications 2020). `R-markdown` report is available at (https://nvolkova.github.io/signature-interactions/)[https://nvolkova.github.io/signature-interactions/].
 
 ## Contents:
 
